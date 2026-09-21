@@ -10,7 +10,7 @@ class AppTests(unittest.TestCase):
     def test_dashboard_and_detail(self):
         with tempfile.TemporaryDirectory() as folder:
             with patch.dict(os.environ, {"SEMI_GUARD_DB": str(Path(folder) / "app.db")}):
-                app = AppTest.from_file("app.py", default_timeout=45).run()
+                app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py"), default_timeout=45).run()
                 self.assertEqual(len(app.exception), 0)
                 self.assertEqual(len(app.error), 0)
                 self.assertEqual(app.metric[0].value, "3")
