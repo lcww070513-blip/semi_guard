@@ -5,7 +5,7 @@ import streamlit as st
 from config import NOTICE
 from database import connect_database
 from service import initialize_demo, append_demo
-from views import dashboard, equipment_detail
+from views import dashboard, equipment_detail, event_history
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ def main():
     st.info(NOTICE)
     st.sidebar.title("SEMI-GUARD")
     st.sidebar.caption("가상 설비 3대 · 통계 기반 모니터링")
-    page = st.sidebar.radio("화면", ["종합 대시보드", "설비 상세"])
+    page = st.sidebar.radio("화면", ["종합 대시보드", "설비 상세", "이상 이력 및 조치"])
     seed = st.sidebar.number_input("추가 데이터 시드", min_value=0, max_value=2147483647, value=44, step=1)
     add_data = st.sidebar.button("현재 시각 가상 데이터 추가")
     st.sidebar.caption("새로고침은 데이터를 추가하지 않습니다. 버튼을 누르면 설비별 1개씩 추가합니다.")
@@ -30,8 +30,10 @@ def main():
             st.sidebar.success(f"가상 측정값 {count}개를 저장했습니다.")
         if page == "종합 대시보드":
             dashboard.render(connection)
-        else:
+        elif page == "설비 상세":
             equipment_detail.render(connection)
+        else:
+            event_history.render(connection)
     except (ValueError, sqlite3.Error, OSError) as error:
         logger.exception("SEMI-GUARD 처리 실패")
         if isinstance(error, ValueError):
