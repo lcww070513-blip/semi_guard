@@ -47,3 +47,34 @@ def sensor_history(connection, equipment, sensor, limit=100):
         WHERE s.data_kind='operation' AND s.equipment_id=?
         ORDER BY s.timestamp DESC LIMIT ?
     """, (sensor, equipment, int(limit))).sort_values("timestamp")
+
+
+def event_date_bounds(connection):
+    return connection.execute(
+        "SELECT date(MIN(occurred_at)), date(MAX(occurred_at)) FROM events").fetchone()
+
+
+def build_event_filter(start_date, end_date, equipment="전체", sensor="전체",
+                       severity="전체", progress="전체"):
+    from datetime import timedelta
+    if start_date > end_date:
+        raise ValueError("시작 날짜는 종료 날짜보다 늦을 수 없습니다.")
+    clauses = ["occurred_at >= ?", "occurred_at < ?"]
+    parameters = [str(start_date), str(end_date + timedelta(days=1))]
+    for column, value in [("equipment_id", equipment), ("sensor_name", sensor),
+                          ("severity", severity), ("progress_status", progress)]:
+        if value != "전체":
+            clauses.append(f"{column}=?")
+            parameters.append(value)
+    return " AND ".join(clauses), parameters
+
+
+def filtered_events(connection, start_date, end_date, equipment="전체", sensor="전체",
+                    severity="전체", progress="전체", page=1, page_size=100):
+    where, parameters = build_event_filter(start_date, end_date, equipment, sensor, severity, progress)
+    total = connection.execute(f"SELECT COUNT(*) FROM events WHERE {where}", parameters).fetchone()[0]
+    frame = query_frame(connection, f"""
+        SELECT * FROM events WHERE {where}
+        ORDER BY occurred_at DESC, id DESC LIMIT ? OFFSET ?
+    """, (*parameters, page_size, (page - 1) * page_size))
+    return frame, total
