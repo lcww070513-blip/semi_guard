@@ -51,7 +51,20 @@ def render(connection):
     event = events[events.id == event_id].iloc[0]
     st.warning(event.reason)
     previous = latest_inspection(connection, event_id)
-    previous_id = previous["id"] if previous else None
+    # 제출 시에도 사용자가 처음 열어 본 버전을 유지해야 동시 편집을 감지할 수 있습니다.
+    baseline_key = f"inspection_baseline_{event_id}"
+    if st.button("최신 점검 기록 다시 불러오기", key=f"reload_{event_id}"):
+        st.session_state.pop(baseline_key, None)
+        for key in list(st.session_state):
+            if key.startswith(f"inspection_{event_id}_"):
+                del st.session_state[key]
+        st.rerun()
+    if baseline_key not in st.session_state:
+        st.session_state[baseline_key] = previous["id"] if previous else None
+    previous_id = st.session_state[baseline_key]
+    previous = connection.execute(
+        "SELECT * FROM inspection_records WHERE id=? AND event_id=?",
+        (previous_id, int(event_id)),).fetchone() if previous_id is not None else None
     checked_before = json.loads(previous["checklist_json"]) if previous else {}
     form_key = f"inspection_{event_id}_{previous_id}"
     with st.form(form_key):
@@ -64,7 +77,8 @@ def render(connection):
         action = st.text_area("조치 내용", value=previous["action_taken"] if previous else "",
                               placeholder="확인·조치한 내용과 재측정 결과를 기록하세요.", key=f"{form_key}_action")
         state = st.selectbox("저장할 진행 상태", PROGRESS_STATES,
-                             index=PROGRESS_STATES.index(event.progress_status), key=f"{form_key}_state")
+                             index=PROGRESS_STATES.index(previous["progress_status"] if previous else "미확인"),
+                             key=f"{form_key}_state")
         submitted = st.form_submit_button("점검 기록 저장", type="primary")
     if submitted:
         try:
@@ -72,6 +86,7 @@ def render(connection):
         except ValueError as error:
             st.error(str(error))
         else:
+            st.session_state.pop(baseline_key, None)
             st.session_state["inspection_notice"] = "점검 기록과 진행 상태를 저장했습니다."
             st.rerun()
     st.subheader("이 이벤트의 점검 기록")
@@ -84,4 +99,7 @@ def render(connection):
     if records.empty:
         st.caption("아직 저장된 점검 기록이 없습니다.")
     else:
+        records["점검항목"] = records["점검항목"].map(
+            lambda value: " / ".join(f"{'완료' if done else '미완료'}: {item}"
+                                      for item, done in json.loads(value).items()))
         st.dataframe(records, hide_index=True, use_container_width=True)
